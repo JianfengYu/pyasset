@@ -499,7 +499,7 @@ if __name__ == "__main__":
     import numpy as np
 
     # 获取收益率数据
-    db = pd.HDFStore('DB.h5')
+    db = pd.HDFStore('..\data\DB.h5')
     ret = db['ret_index']
     ret = ret[['Bond', 'Stock']]
     ret = ret.dropna()

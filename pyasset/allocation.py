@@ -263,7 +263,7 @@ def get_trading_days(df_ret: pd.DataFrame, freq='Q'):
 
 
 if __name__ == "__main__":
-    db = pd.HDFStore('DB.h5')
+    db = pd.HDFStore('..\data\DB.h5')
     ret = db['ret_index']
     ret = ret.dropna()
     db.close()

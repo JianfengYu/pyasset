@@ -59,7 +59,7 @@ class Xray:
 
 if __name__ == '__main__':
     # 获取收益率数据
-    db = pd.HDFStore('.\pyasset\DB.h5')
+    db = pd.HDFStore('..\data\DB.h5')
     print(db.keys())
     ret = db['ret_index']
     # ret = ret[['Bond', 'Stock']]

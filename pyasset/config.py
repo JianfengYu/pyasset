@@ -12,14 +12,4 @@ TRADING_MONTHS_A_YEAR = 12
 
 
 if __name__ == '__main__':
-
-    # 检查数据库中是否有该基金经理
-    df = pd.read_excel('新财富中国最佳私募证券投资经理_匹配后.xlsx')
-    df.columns = ['manager', 'strategy', 'year', 'company', 'city']
-
-    for item in df.itertuples():
-        sql = """
-        select * from v_fund_manager where user_name = '{0}' and org_name = '{1}'
-        """.format(item.manager, item.company)
-        print(item)
-        print(pd.read_sql(sql, con=sws_conn))
+    pass
