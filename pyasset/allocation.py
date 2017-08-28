@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
+import abc
 
 import pyasset.optimizer as opz
 
 
-class Allocation:
+class Allocation(metaclass=abc.ABCMeta):
     """权重类"""
 
     def __init__(self, ret_xp: pd.DataFrame, cov_xp: pd.Panel,
@@ -17,13 +18,14 @@ class Allocation:
         self.end = end_date                         # 终止日
         self.ret_xp_trading = None                  # 调仓日观察到的期望收益
         self.cov_xp_trading = None                  # 调仓日观察到的方差协方差矩阵
+        self.rebalance_days = None
 
     def get_rebalance_info(self) -> None:
         """得到可交易日的调仓日信息"""
-        rebalance_days = get_trading_days(self.ret_xp, self.freq)
+        self.rebalance_days = get_trading_days(self.ret_xp, self.freq)
 
-        self.ret_xp_trading = self.ret_xp.T[rebalance_days]  # 注意这里进行了转置，列为日期
-        self.cov_xp_trading = self.cov_xp[rebalance_days]
+        self.ret_xp_trading = self.ret_xp.T[self.rebalance_days]  # 注意这里进行了转置，列为日期
+        self.cov_xp_trading = self.cov_xp[self.rebalance_days]
 
     def get_equal_weight(self) -> pd.DataFrame:
         """
@@ -132,8 +134,8 @@ class Allocation:
 
         return weight
 
-    def get_mean_variance_weight(self,  tau=None, target_vol=0.10, bound=None,
-                                 constraints=({'type': 'eq', 'fun': lambda w: sum(w) - 1.0}),
+    def get_mean_variance_weight(self, tau=None, target_vol=0.10, bound=None,
+                                 constrains=({'type': 'eq', 'fun': lambda w: sum(w) - 1.0}),
                                  x0=None, tol=1e-10) -> pd.DataFrame:
         """
         均值方差 需要自己给定边界条件
@@ -146,7 +148,7 @@ class Allocation:
             目标波动率，默认为0.1
         bound: list or None
             边界条件，默认为None，即无边界条件。
-        constraints: tuple of dict
+        constrains: tuple of dict
             限制条件，默认为
             ({'type': 'eq',
               'fun': lambda w: sum(w) - 1.0})
@@ -174,7 +176,7 @@ class Allocation:
             cov_day = cov_matrix[day]          # 方差协方差矩阵
 
             tmp_weight = opz.Markovitz_solver(r_day, cov_day, tau=tau, target_vol=target_vol,
-                                              bound=bound, constrains=constraints, x0=x0, tol=tol)
+                                              bound=bound, constrains=constrains, x0=x0, tol=tol)
 
             weight.append(tmp_weight)
 

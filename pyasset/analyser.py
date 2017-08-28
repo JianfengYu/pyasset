@@ -152,7 +152,7 @@ def cal_sharpe(net_value: pd.Series, rf=None, freq='M') -> float:
         raise Exception('The freq type is not suportted!')
 
     if rf is None:
-        re_p = net_value.pct_change().dropna()
+        re_p = net_value.pct_change().dropna() - 1.5/100/360 # 若不给定rf,则用默认值
     else:
         re_p = (net_value.pct_change - rf).dropna()
 
@@ -360,6 +360,181 @@ def portfolio_value_at_risk(re: pd.Series, cov: pd.DataFrame, weight: pd.Series,
         return 0
     else:
         return re_p + dist * std_p
+
+
+def cal_tracking_error(net_value: pd.Series, bench_nv: pd.Series) -> float:
+    """
+    计算年化跟踪误差
+        跟踪误差是指组合收益率与基准收益率(大盘指数收益率)之间的差异的收益率标准差，反映了基金管理的风险。
+
+    Parameters
+    ----------
+    net_value
+        策略日净值的时间序列，支持原始账户总资产的时间序列
+
+    bench_nv
+        基准日净值的时间序列，支持原始基准指数的时间序列
+
+    Returns
+    -------
+    float
+        年化跟踪误差
+
+    References
+    _______
+        Wiki： https://en.wikipedia.org/wiki/Tracking_error
+    """
+    diff = (net_value.pct_change() - bench_nv.pct_change()).dropna()
+    te = np.sqrt((diff * diff).sum() / len(diff) * TRADING_DAYS_A_YEAR)
+
+    return te
+
+
+def cal_information_ratio(net_value: pd.Series, bench_nv = None) -> float:
+    """
+    计算年化信息比率
+        表示单位主动风险所带来的超额收益
+        IR = E[R_p-R_b]/sqrt(Var(R_p-R_b))
+        若Var(R_p-R_b)为零，返回带符号的np.inf
+
+    Parameters
+    ----------
+    net_value
+        策略净值的时间序列，支持原始账户总资产的时间序列
+
+    bench_nv
+        基准净值的时间序列，支持原始账户总资产的时间序列
+
+    Returns
+    -------
+    float
+        年化信息比率
+
+    References
+    _______
+        Wiki： https://en.wikipedia.org/wiki/Information_ratio
+    """
+    r_p = net_value.pct_change().dropna()
+    if bench_nv is not None:
+        r_b = bench_nv.pct_change().dropna()
+        diff = r_p - r_b
+    else:
+        diff = r_p
+
+    if diff.std() != 0:
+        IR = (diff.mean() / diff.std()) * np.sqrt(TRADING_DAYS_A_YEAR)
+    else:
+        IR = np.sign(diff.mean()) * np.inf
+
+    return IR
+
+
+def cal_beta(net_value: pd.Series, bench_nv: pd.Series, rf: pd.Series) -> float:
+    """
+    计算策略的历史beta
+        资本资产定价模型（CAPM）的Beta
+        若bench_nv的方差为0，返回np.NaN
+
+    Parameters
+    ----------
+    net_value
+        策略净值的时间序列，支持原始账户总资产的时间序列
+
+    bench_nv
+        基准净值的时间序列，支持原始账户总资产的时间序列
+
+    rf
+        无风险收益率的时间序列
+
+    Returns
+    -------
+    float
+        策略的beta
+
+    References
+    _______
+        Wiki： https://en.wikipedia.org/wiki/Capital_asset_pricing_model
+    """
+    re_p = (net_value.pct_change() - rf).dropna()  # 策略超额收益序列
+    re_b = (bench_nv.pct_change() - rf).dropna()
+
+    if re_b.var() ==0:
+        return np.NaN
+    else:
+        beta = re_p.cov(re_b) / re_b.var()
+        return beta
+
+
+def cal_alpha(net_value: pd.Series, bench_nv: pd.Series, rf: pd.Series, beta=1) -> float:
+    """
+    计算策略的alpha
+        默认计算投资组合相对基准的超额收益，即beta=1。
+        若要用资本资产定价模型（CAPM）的Alpha，可指定参数beta为CAPM模型的beta。
+
+    Parameters
+    ----------
+    net_value
+        策略净值的时间序列，支持原始账户总资产的时间序列
+
+    bench_nv
+        基准净值的时间序列，支持原始账户总资产的时间序列
+
+    rf
+        无风险收益率的时间序列
+
+    beta
+        策略的beta值，默认为1。
+
+    Returns
+    -------
+    float
+        策略的alpha
+
+    """
+
+    annal_rp = cal_annal_return(net_value)
+    annal_rb = cal_annal_return(bench_nv)
+    annal_rf = cal_annal_return((1 + rf).cumprod())
+
+    alpha = annal_rp - annal_rf - beta * (annal_rb - annal_rf)
+    return alpha
+
+
+def cal_treynor(net_value: pd.Series, bench_nv: pd.Series, rf: pd.Series) -> float:
+    """
+    计算年化Treynor比率
+        组合的超额收益除以组合的beta值。
+
+    Parameters
+    ----------
+    net_value
+        策略净值的时间序列，支持原始账户总资产的时间序列
+
+    bench_nv
+        基准净值的时间序列，支持原始账户总资产的时间序列
+
+    rf
+        无风险收益的时间序列
+
+    Returns
+    -------
+    float
+        策略年化Treynor比率
+
+    References
+    _______
+    https://en.wikipedia.org/wiki/Treynor_ratio
+    """
+    beta = cal_beta(net_value, bench_nv, rf)
+    annal_rp = cal_annal_return(net_value)
+    annal_rf = cal_annal_return((1 + rf).cumprod())
+
+    if beta == 0:
+        return np.sign(annal_rp - annal_rf) * np.inf
+    elif beta == np.NaN:
+        return np.NaN
+    else:
+        return (annal_rp - annal_rf) / beta
 
 
 if __name__ == '__main__':

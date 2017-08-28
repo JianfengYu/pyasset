@@ -1,11 +1,11 @@
 import pandas as pd
 import numpy as np
 import warnings
-import cvxopt as opt
-from cvxopt import matrix, blas, solvers, log, div, spdiag
+# import cvxopt as opt
+# from cvxopt import matrix, blas, solvers, log, div, spdiag
 
 # turn off progress printing
-solvers.options['show_progress'] = False
+# solvers.options['show_progress'] = False
 
 import scipy.optimize as sopt #解凸优化
 
@@ -137,7 +137,7 @@ def risk_budget_solver(cov: pd.DataFrame, risk_budget:list, tol= 1e-10):
     return res_risk_budget['x']
 
 
-def Markovitz_solver(r, C, tau=None, bound=None, target_vol=0.1, x0=None, tol= 1e-10,
+def Markovitz_solver(r, C, tau=None, bound=None, target_vol=None, x0=None, tol= 1e-12,
                      constrains=({'type': 'eq',  'fun': lambda w: sum(w) - 1.0})
                      ):
     """
@@ -150,7 +150,7 @@ def Markovitz_solver(r, C, tau=None, bound=None, target_vol=0.1, x0=None, tol= 1
     C
         方差协方差矩阵
     tau
-        风险厌恶系数，和目标波动率必须制定一个
+        风险厌恶系数
     bound
         边界条件
     constrains
@@ -166,7 +166,7 @@ def Markovitz_solver(r, C, tau=None, bound=None, target_vol=0.1, x0=None, tol= 1
     -------
 
     """
-    assert tau is not None or target_vol is not None, "One of the tau and target_vol should be specified!"
+    # assert tau is not None or target_vol is not None, "One of the tau and target_vol should be specified!"
 
     numAsset = len(r)
 
@@ -182,17 +182,25 @@ def Markovitz_solver(r, C, tau=None, bound=None, target_vol=0.1, x0=None, tol= 1
     # else:
     #     bounds = bound
 
-    # 风险厌恶系数设置 可以由目标波动率反推出
-    if tau is None:
-        t = np.sqrt(np.dot(np.dot(r, np.linalg.inv(C)), r)) / target_vol
+    # # 风险厌恶系数设置，在无约束条件下可以由目标波动率反推出
+    # if tau is None:
+    #     t = np.sqrt(np.dot(np.dot(r, np.linalg.inv(C)), r)) / target_vol
+    # else:
+    #     t = tau
+
+    t = tau
+
+    if target_vol is not None:
+        cons = ({'type': 'eq', 'fun': lambda w: sum(w) - 1.0},
+                      {'type': 'ineq', 'fun': lambda w: target_vol - np.dot(np.dot(w, C), w)})
     else:
-        t = tau
+        cons = constrains
 
     def objFunc(w, r, C, tau): # tau为风险厌恶系数
         val = t/2 * np.dot(np.dot(w, C), w) - sum(w * r)
         return val
 
-    result = sopt.minimize(objFunc, w0, (r, C, t), method='SLSQP', constraints=constrains, bounds=bound, tol=tol)
+    result = sopt.minimize(objFunc, w0, (r, C, t), method='SLSQP', constraints=cons, bounds=bound, tol=tol)
     w_opt = result.x
 
     return w_opt
@@ -421,78 +429,80 @@ def Markovitz_mu_solver(r, C, target_vol=0.4, bound=None, constrains=None, tol= 
 "" 以下为原始code
 """""""""""
 
-def Markovitz(re_day: pd.Series, cov_day: pd.DataFrame, target_vol:float, mu=None):
-    n = len(re_day)
-    S = matrix(np.asmatrix(cov_day))
-    pbar = matrix(np.array(re_day))
-
-    if mu is None:
-        m = float(np.sqrt(np.dot(np.dot(re_day, np.linalg.inv(cov_day)), re_day)) / target_vol)
-    else:
-        m = mu
-
-    G = - matrix(np.eye(n))
-    h = matrix(0.0, (n ,1))
-    A = matrix(1.0, (1, n))
-    b = matrix(1.0)
-
-    sol = solvers.qp(m*S, -pbar, G, h, A, b)
-
-    return list(sol['x'])
-
-def Markovitz2(re_day: pd.Series, cov_day: pd.DataFrame, target_vol:float, mu=None, max_weight=0.8):
-    n = len(re_day)
-    S = matrix(np.asmatrix(cov_day))
-    pbar = matrix(np.array(re_day))
-
-    if mu is None:
-        m = float(np.sqrt(np.dot(np.dot(re_day, np.linalg.inv(cov_day)), re_day)) / target_vol)
-    else:
-        m = mu
-
-    G1 = - np.eye(n)
-    G2 = np.eye(n)
-    G = matrix(np.vstack((G1, G2)))
-
-    h1 = np.zeros(n)
-    h2 = np.ones(n) * max_weight
-    h = matrix(np.hstack((h1,h2)))
-
-    A = matrix(1.0, (1, n))
-    b = matrix(1.0)
-
-    sol = solvers.qp(m*S, -pbar, G, h, A, b)
-
-    return list(sol['x'])
-
-def Markovitz_c_l(re_day: pd.Series, cov_day: pd.DataFrame, target_vol:float):
-    """
-    带杠杆
-    """
-    n = len(re_day)
-    S = matrix(np.asmatrix(cov_day))
-    pbar = matrix(np.array(re_day))
-
-    mu = np.sqrt(np.dot(np.dot(re_day, np.linalg.inv(cov_day)), re_day)) / target_vol
-
-    G1 = - np.eye(n)
-    G2 = np.eye(n)
-    G = matrix(np.vstack((G1, G2)))
-
-    h1 = np.zeros(n)
-    h1[-3] = 0.35
-    h2 = np.ones(n)
-    h2[-2] = 1.35
-    h2[-1] = 0.3
-    # h2[-3] = 0.2
-    h = matrix(np.hstack((h1,h2)))
-
-    A = matrix(1.0, (1, n))
-    b = matrix(1.0)
-
-    sol = solvers.qp(mu*S, -pbar, G, h, A, b)
-
-    return list(sol['x'])
+# def markovitz(re_day: pd.Series, cov_day: pd.DataFrame, target_vol: float, mu=None):
+#     n = len(re_day)
+#     S = matrix(np.asmatrix(cov_day))
+#     pbar = matrix(np.array(re_day))
+#
+#     if mu is None:
+#         m = float(np.sqrt(np.dot(np.dot(re_day, np.linalg.inv(cov_day)), re_day)) / target_vol)
+#     else:
+#         m = mu
+#
+#     G = - matrix(np.eye(n))
+#     h = matrix(0.0, (n ,1))
+#     A = matrix(1.0, (1, n))
+#     b = matrix(1.0)
+#
+#     sol = solvers.qp(m*S, -pbar, G, h, A, b)
+#
+#     return list(sol['x'])
+#
+#
+# def markovitz2(re_day: pd.Series, cov_day: pd.DataFrame, target_vol: float, mu=None, max_weight=0.8):
+#     n = len(re_day)
+#     S = matrix(np.asmatrix(cov_day))
+#     pbar = matrix(np.array(re_day))
+#
+#     if mu is None:
+#         m = float(np.sqrt(np.dot(np.dot(re_day, np.linalg.inv(cov_day)), re_day)) / target_vol)
+#     else:
+#         m = mu
+#
+#     G1 = - np.eye(n)
+#     G2 = np.eye(n)
+#     G = matrix(np.vstack((G1, G2)))
+#
+#     h1 = np.zeros(n)
+#     h2 = np.ones(n) * max_weight
+#     h = matrix(np.hstack((h1,h2)))
+#
+#     A = matrix(1.0, (1, n))
+#     b = matrix(1.0)
+#
+#     sol = solvers.qp(m*S, -pbar, G, h, A, b)
+#
+#     return list(sol['x'])
+#
+#
+# def markovitz_c_l(re_day: pd.Series, cov_day: pd.DataFrame, target_vol: float):
+#     """
+#     带杠杆
+#     """
+#     n = len(re_day)
+#     S = matrix(np.asmatrix(cov_day))
+#     pbar = matrix(np.array(re_day))
+#
+#     mu = np.sqrt(np.dot(np.dot(re_day, np.linalg.inv(cov_day)), re_day)) / target_vol
+#
+#     G1 = - np.eye(n)
+#     G2 = np.eye(n)
+#     G = matrix(np.vstack((G1, G2)))
+#
+#     h1 = np.zeros(n)
+#     h1[-3] = 0.35
+#     h2 = np.ones(n)
+#     h2[-2] = 1.35
+#     h2[-1] = 0.3
+#     # h2[-3] = 0.2
+#     h = matrix(np.hstack((h1, h2)))
+#
+#     A = matrix(1.0, (1, n))
+#     b = matrix(1.0)
+#
+#     sol = solvers.qp(mu*S, -pbar, G, h, A, b)
+#
+#     return list(sol['x'])
 
 if __name__ == "__main__":
     import pandas as pd
@@ -505,19 +515,32 @@ if __name__ == "__main__":
     ret = ret.dropna()
     db.close()
 
-    bound = [(0,1)]*2
-
+    bound = [(0, 1)]*2
 
     # res_1 = max_sharpe_solver(ret.mean(), ret.cov(), bound=bound)
     #
     # print(res_1)
 
-    res_2 = Markovitz_solver(ret.mean(), ret.cov(), target_vol=0.1, bound=bound)
+    print(ret.mean().values, ret.cov().values)
+    res_2 = Markovitz_solver(ret.mean().values, ret.cov().values, target_vol=0.1, bound=bound)
     print(res_2)
 
-    res_rp = risk_parity_solver(ret.cov())
-    print(res_rp)
+    # res_rp = risk_parity_solver(ret.cov())
+    # print(res_rp)
+    #
+    # res_3 = Markovitz_l2_penalty(ret.mean(), ret.cov(), xb=res_rp, A=np.diag(np.diag(ret.cov())), target_vol=0.1,
+    #                              bound=bound)
+    # print(res_3)
 
-    res_3 = Markovitz_l2_penalty(ret.mean(), ret.cov(), xb=res_rp, A=np.diag(np.diag(ret.cov())), target_vol=0.1, bound=bound)
-    print(res_3)
+    ret = np.array([[ 0.93663167],
+       [-0.03492173],
+       [-0.03153154]])
 
+    cov = np.array([[  1.42216965e-01,   3.37516375e-04,   6.86467677e-03],
+       [  3.37516375e-04,   1.43890736e-05,  -1.45749037e-05],
+       [  6.86467677e-03,  -1.45749037e-05,   1.93741191e-02]])
+
+    print(ret)
+    print(cov)
+    # res = Markovitz_solver(ret, cov, tau=5, bound=[(0,1)*3])
+    # print(res)

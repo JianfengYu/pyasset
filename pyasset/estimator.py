@@ -7,6 +7,7 @@
 import numpy as np
 import pandas as pd
 
+
 class Estimator:
 
     def __init__(self, df_ret: pd.DataFrame):
