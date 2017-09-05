@@ -273,7 +273,7 @@ def cal_tracking_error(net_value: pd.Series, bench_nv: pd.Series, freq='D') -> f
     return te
 
 
-def cal_information_ratio(net_value: pd.Series, bench_nv: pd.Series, freq='D') -> float:
+def cal_information_ratio(net_value: pd.Series, bench_nv=None, freq='D') -> float:
     """
     计算年化信息比率
         表示单位主动风险所带来的超额收益
@@ -300,17 +300,19 @@ def cal_information_ratio(net_value: pd.Series, bench_nv: pd.Series, freq='D') -
     _______
         Wiki： https://en.wikipedia.org/wiki/Information_ratio
     """
-    periods = freq_periods(freq)
-
     r_p = net_value.pct_change().dropna()
-    r_b = bench_nv.pct_change().dropna()
-    diff = r_p - r_b
-    if diff.std() != 0:
-        ir = (diff.mean() / diff.std()) * np.sqrt(periods)
+    if bench_nv is not None:
+        r_b = bench_nv.pct_change().dropna()
+        diff = r_p - r_b
     else:
-        ir = np.sign(diff.mean()) * np.inf
+        diff = r_p
 
-    return ir
+    if diff.std() != 0:
+        IR = (diff.mean() / diff.std()) * np.sqrt(TRADING_DAYS_A_YEAR)
+    else:
+        IR = np.sign(diff.mean()) * np.inf
+
+    return IR
 
 
 def cal_beta(net_value: pd.Series, bench_nv: pd.Series, rf: pd.Series) -> float:
@@ -417,7 +419,7 @@ def cal_sharpe(net_value: pd.Series, rf=None, freq='D') -> float:
     periods = freq_periods(freq)
 
     if rf is None:
-        re_p = net_value.pct_change().dropna()
+        re_p = net_value.pct_change().dropna() - 1.5/100/360 # 若不给定rf,则用默认值
     else:
         re_p = (net_value.pct_change() - rf).dropna()
 

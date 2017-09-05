@@ -12,7 +12,7 @@
 
 import numpy as np
 import pandas as pd
-from pyasset import analyser as als
+from pyasset import analyze as als
 
 
 # # get data

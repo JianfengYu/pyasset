@@ -92,12 +92,23 @@ class Xray:
 
             sns.plt.xticks(rotation=-30)
 
+            # 增加annotate
+            def annotateBars(row, ax=g):
+                for p in ax.patches:
+                    # print(p.get_x(), p.get_y(), p.get_width(), p.get_height())
+                    sign = 1 if p.get_y() >= 0 else -1
+                    large0 = p.get_height() if p.get_height() >=0 else 0
+                    # print(p.get_height(), large0)
+                    ax.annotate('{0:.1f}%'.format(100 * sign * p.get_height()),
+                                (p.get_x() + p.get_width() / 2., large0),
+                                ha='center', va='center', fontsize=11, color='gray', rotation=30, xytext=(0, 15),
+                                textcoords='offset points')
+            aaa.apply(annotateBars, ax=g, axis=1)
+
             sns.plt.ylabel('收益占比')
             # sns.plt.rcParams['image.cmap'] = 'Paired'
 
             sns.plt.show()
-
-
 
             # asset_contribution_total = pd.DataFrame({'业绩归因': asset_contribution_total})
             # asset_contribution_total.plot(title=self._s_name + ' 业绩归因', kind = 'bar', alpha=0.9,
